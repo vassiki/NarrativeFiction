@@ -119,10 +119,11 @@ else
     WaitSecs(1);
     vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
 end
+
 tic
 % presentation
 
-for trial = 1:5%length(words)
+for trial = 1:length(words)
     
     %vbl = Screen('Flip', window);
     
