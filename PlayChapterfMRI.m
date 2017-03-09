@@ -1,5 +1,5 @@
-function [startTime] = PlayChapterfMRI(ChapNum, DEBUG)
-
+function [startTime] = PlayChapterfMRI(Sub,ChapNum, DEBUG)
+% PlayChapterfMRI(Subject,Chapter,DEBUG)
 AssertOpenGL;
 
 if DEBUG
@@ -10,6 +10,12 @@ end
 repetitions = 1;
 
 outdir = pwd;
+subdir = fullfile(outdir,['Sub' num2str(Sub)]);
+
+if ~exist(subdir,'dir')
+    mkdir(subdir);
+end
+
 UtilDir = fullfile(outdir,'ExpUtils');
 ChapDir = fullfile(outdir,'Chapters');
 
@@ -30,10 +36,18 @@ Screen('BlendFunction', window, 'GL_SRC_ALPHA', 'GL_ONE_MINUS_SRC_ALPHA');
 [xCenter, yCenter] = RectCenter(windowRect);
 
 % USE audiodevinfo IF RUNNING INTO TROUBLE WITH PLAYING AUDIO
-instrSecs = 3;
+instrSecs = 2;
 instrFrames = round(instrSecs / ifi);
 waitFrames = 1;
 
+vbl = Screen('Flip',window);
+% instruction screen
+for frame=1:instrFrames
+    blocktext='Please maintain fixation and \n listen to the following chapter from \n Pride and Prejudice. Enjoy! \n';
+    Screen(window,'TextSize', 30);
+    DrawFormattedText(window, blocktext, 'center', 'center', white);
+    vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
+end
 fixCrossDimPix = 30;
 
 % Fixation
@@ -48,28 +62,6 @@ if listenScan
     hLum = lumOpen();
 end
 
-waitT = 0;
-if listenScan
-    %waitT = waitForTrigger(hLum);
-    while waitT == 0
-        DisplayText = 'Waiting for trigger...';
-        Screen(window,'TextSize', 50);
-        DrawFormattedText(window,DisplayText,'center','center', white);
-        vbl = Screen('Flip',window);
-        waitT = waitForTrigger(hLum);
-    end
-else
-    WaitSecs(1);
-    vbl = Screen('Flip',window);
-end
-
-% instruction screen
-for frame=1:instrFrames
-    blocktext='Please maintain fixation and \n listen to the following chapter from \n Pride and Prejudice. Enjoy! \n';
-    Screen(window,'TextSize', 30);
-    DrawFormattedText(window, blocktext, 'center', 'center', white);
-    vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
-end
 
 % get chapter
 %wavfilename = ['prideandprejudice_' num2str(ChapNum) '_austen_64kb.mp3'];
@@ -100,9 +92,25 @@ end
 
 PsychPortAudio('FillBuffer', pahandle, wavedata);
 
-padding = 15;
+waitT = 0;
+if listenScan
+    %waitT = waitForTrigger(hLum);
+    while waitT == 0
+        DisplayText = 'Waiting for trigger...';
+        Screen(window,'TextSize', 50);
+        DrawFormattedText(window,DisplayText,'center','center', white);
+        vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
+        waitT = waitForTrigger(hLum);
+    end
+else
+    WaitSecs(1);
+    vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
+end
+
+padding = 18; % for HRF to subside
 TotalLength = GetSecs() + ChapLength + padding;
 startTime = PsychPortAudio('Start', pahandle, repetitions, 0, 1);
+ChapInfo.onset = GetSecs();
 %t = datetime(now);
 while GetSecs < TotalLength
     Screen('DrawLines', window, allCoords,...
@@ -132,8 +140,10 @@ if listenScan
     IOPort('Close',hLum);
 end
 
-
+ChapInfo.dur = GetSecs()-ChapInfo.onset;
 ShowCursor;
 Screen('Close All');
 sca
+
+save (fullfile(subdir,['Sub' num2str(Sub) 'Chp' num2str(ChapNum) '.mat']),'ChapInfo');
 end%function

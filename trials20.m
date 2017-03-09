@@ -65,7 +65,7 @@ for i = 1:length(stim)
 end
 
 %% fixation
-fixCrossDimPix = 40;
+fixCrossDimPix = 30;
 
 % Now we set the coordinates (these are all relative to zero we will let
 % the drawing routine center the cross in the center of our monitor for us)
@@ -76,9 +76,9 @@ allCoords = [xCoords; yCoords];
 lineWidthPix = 4;
 
 % Deg2Pix is approz 45 for viewing distance of 60 cm
-D2P = 45; VA = 3;
-leftBound = xCenter-(VA*D2P); rightBound = xCenter+(VA*D2P);
-topBound = yCenter-(VA*D2P); bottomBound = yCenter+(VA*D2P);
+D2P = 45; VisAn = 3;
+leftBound = xCenter-(VisAn*D2P); rightBound = xCenter+(VisAn*D2P);
+topBound = yCenter-(VisAn*D2P); bottomBound = yCenter+(VisAn*D2P);
 %% presentation
 
 for trial = 1:length(words)

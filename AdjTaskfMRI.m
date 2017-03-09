@@ -11,6 +11,12 @@ else
 end
 
 outdir = pwd;
+subdir = fullfile(outdir,['Sub' num2str(Subject)]);
+
+if ~exist(subdir,'dir')
+    mkdir(subdir);
+end
+
 addpath(fullfile(outdir,'ExpUtils'));
 
 PsychDefaultSetup(2);
@@ -32,12 +38,12 @@ cmx = mmx/10;
 CmToPix = (screenXpixels/cmx);
 D2P = ceil(tan(2*pi/360)*(ViewDist*CmToPix));
 
-correctButtons = [1 2 3 4];
+%correctButtons = [1 2 3 4];
 
 % timing
 
 instrSecs = 4;
-fixSecs = 0.5;
+fixSecs = 16;
 if DEBUG
     nameSecs = 4;
     wordsSecs = 4;
@@ -45,31 +51,35 @@ else
     nameSecs = 4;
     wordsSecs = 4;
 end
-readySecs = 0.5;
 respSecs = 2;
 
 instrFrames = round(instrSecs / ifi);
 fixFrames = round(fixSecs / ifi);
 nameFrames = round(nameSecs / ifi);
 wordsFrames = round(wordsSecs / ifi);
-readyFrames = round(readySecs / ifi);
 respFrames = round(respSecs / ifi);
 
 waitFrames = 1;
 
 % stimuli
 
-%stimFile = fopen('Words.csv','r');
-stimFile = fopen(['Run' num2str(Run) '.csv'],'r');
-%stim = textscan(stimFile, '%s%s%s', 'delimiter', ',');
-stim = textscan(stimFile, '%s%s%s%s', 'delimiter', ',');
+file = fullfile(subdir,['Run' num2str(Run) '.csv']);
+stimFile = fopen(file,'r');
+stim = textscan(stimFile, '%s%s%s%s%s', 'delimiter', ',');
 fclose(stimFile);
 
 for i = 1:length(stim)
-    for j=2:length(stim{1,1})
-        words{j-1,i} = stim{1,i}{j,1};
+    for j=1:length(stim{1,1})
+        words{j,i} = stim{1,i}{j,1};
     end
 end
+
+for i = 1:length(words)
+    jitter{i} = str2num(words{i,5});
+    jittFrame{i,1} = round(jitter{i} / ifi);
+    lORr{i,1} = str2num(words{i,4});
+end
+
 
 % fixation
 fixCrossDimPix = 30;
@@ -100,13 +110,13 @@ for frame=1:instrFrames
     vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
 end
 
-TrialInfo = struct('char',[],'top',[],'bottom',[], ...
-    'nameorth',[],'toporth',[],'botorth',[],'wordsw',[],...
-    'RT',[],'pressedButtons',[],...
-    'leftorth',[],'rightorth',[]);
+TrialInfo = struct('onset',[],'dur',[],'char',[],'top',[],...
+    'bottom',[],'nameorth',[],'toporth',[],'botorth',[],'wordsw',[],...
+    'RT',[],'pressedButtons',[],'leftorth',[],'rightorth',[],'ISI',[]);
 
+% muting for debugging
 waitT = 0;
-if listenScan
+if 0%listenScan
     %waitT = waitForTrigger(hLum);
     while waitT == 0
         DisplayText = 'Waiting for trigger...';
@@ -120,12 +130,13 @@ else
     vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
 end
 
-tic
 % presentation
-
+TrialLoopStart = GetSecs;
+tic
 for trial = 1:length(words)
     
     %vbl = Screen('Flip', window);
+    TrialInfo(trial).onset = TrialLoopStart - GetSecs;
     
     character = words{trial,1};
     word_top = words{trial,2};
@@ -135,11 +146,13 @@ for trial = 1:length(words)
     TrialInfo(trial).top = word_top;
     TrialInfo(trial).bottom = word_bottom;
     
-    for frame = 1:fixFrames
-        Screen('DrawLines', window, allCoords,...
-            lineWidthPix, white, [xCenter yCenter], 2);
+    if trial == 1
+        for frame = 1:fixFrames
+            Screen('DrawLines', window, allCoords,...
+                lineWidthPix, white, [xCenter yCenter], 2);
         
-        vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
+            vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
+        end
     end
     
     Screen('TextSize', window, 80);
@@ -168,59 +181,45 @@ for trial = 1:length(words)
     TrialInfo(trial).toporth = topTextRect;
     TrialInfo(trial).botorth = botTextRect;
     
-    for frame = 1:readyFrames
-        Screen('DrawLines', window, allCoords,...
-            lineWidthPix, [1 0 0], [xCenter yCenter], 2);
-        
-        vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
-    end
-    
-    % this information should come from an excel file so it is the same
-    % across subjects
-    
-    %lORr = randi([1,2],1);
-    lORr = words{trial,4};
-    if lORr == 1
-        TrialInfo(trial).wordsw = 'top2left';
-    else
-        TrialInfo(trial).wordsw = 'top2right';
-    end
     
     numPresses = []; RT = 0; isCorrect = [];
 
-    %while isempty(numPresses)
-    %while sum(numPresses) == 0
     Screen('TextSize', window, 50);
     Screen('TextFont', window, 'Sans Serif');
     
-    if lORr == 1
+    if lORr{trial} == 1
+        TrialInfo(trial).wordsw = 'top2left';
         leftTextRect = Screen('TextBounds',window,word_top);
         xaxis_left = leftBound-leftTextRect(3);
         rightTextRect = Screen('TextBounds',window,word_bottom);
         xaxis_right = rightBound;
     else
+        TrialInfo(trial).wordsw = 'top2right';
         leftTextRect = Screen('TextBounds',window,word_bottom);
         xaxis_left = leftBound-leftTextRect(3);
         rightTextRect = Screen('TextBounds',window,word_top);
         xaxis_right = rightBound;        
     end
     
-    resp_start = GetSecs();
+    resp_start = GetSecs;
     for frame = 1:respFrames
-
         Screen('DrawLines', window, allCoords,...
             lineWidthPix, white, [xCenter yCenter], 2);
-        if lORr == 1
+        if lORr{trial} == 1
             DrawFormattedText(window, word_top, xaxis_left, 'center', white);
             DrawFormattedText(window, word_bottom, xaxis_right, 'center', white);
             Screen('DrawingFinished', window);
             %Flip
             vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);         
-            if listenScan && listenInput
-                [isCorrect, numPresses, RT, ~] = getAnyButtonPress(hLum,correctButtons);
-                if isCorrect
-                    RT = RT-resp_start;
+            if 1%listenScan && listenInput
+                [portData, readTime] = getAnyButtonPress_simple(hLum);
+                if ~isempty(portData)
+                    numPresses = portData;
+                    disp('pressed button')
+                    numPresses
+                    RT = readTime;
                 end
+                isCorrect = 0;
             else
                 [isCorrect, rt, keyCode] = KbCheck;
                 if isCorrect
@@ -240,11 +239,15 @@ for trial = 1:length(words)
             Screen('DrawingFinished', window);
             %Flip
             vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
-            if listenScan && listenInput
-                [isCorrect, numPresses, RT, ~] = getAnyButtonPress(hLum,correctButtons);
-                if isCorrect
-                    RT = RT-resp_start;
+            if 1%listenScan && listenInput
+                [portData, readTime] = getAnyButtonPress_simple(hLum);
+                if ~isempty(portData)
+                    numPresses = portData;
+                    disp('pressed button')
+                    numPresses
+                    RT = readTime;
                 end
+                isCorrect = 0;
             else
                 [isCorrect, rt, keyCode] = KbCheck;
                 if isCorrect
@@ -260,12 +263,32 @@ for trial = 1:length(words)
 
         end
     end
+    TrialInfo(trial).dur = GetSecs - TrialInfo(trial).onset; 
+    TrialInfo(trial).ISI = GetSecs; 
+    %jittFrames = jittFrame{trial};
+    jittFrames = nameFrames;
+    for frame = 1:jittFrames
+        Screen('DrawLines', window, allCoords,...
+            lineWidthPix, white, [xCenter yCenter], 2);
+        
+        vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
+    end
+    
     TrialInfo(trial).RT = RT;
     TrialInfo(trial).pressedButtons = numPresses;
     TrialInfo(trial).leftorth = leftTextRect;
     TrialInfo(trial).rightorth = rightTextRect;
-        
+    
+    
 end
+
+for frame = 1:fixFrames
+    Screen('DrawLines', window, allCoords,...
+        lineWidthPix, white, [xCenter yCenter], 2);
+    
+    vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
+end
+toc
 
 if listenScan
     IOPort('Flush',hLum);
@@ -276,10 +299,9 @@ end
 ShowCursor;
 Screen('CloseAll');
 sca
-toc
 
 out_file=['Sub' num2str(Subject) 'Run' num2str(Run) '_Adj.mat'];
-save (fullfile(outdir,out_file), 'TrialInfo');
+save (fullfile(subdir,out_file), 'TrialInfo');
 end
 
 
