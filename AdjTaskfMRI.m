@@ -54,8 +54,8 @@ if DEBUG
     nameSecs = 4;
     wordsSecs = 4;
 else
-    nameSecs = 4;
-    wordsSecs = 4;
+    nameSecs = 5;
+    wordsSecs = 3;
 end
 respSecs = 2;
 
@@ -122,7 +122,7 @@ TrialInfo = struct('char',[],'top',[],...
     'leftorth',[],'rightorth',[]);
 
 % trial by trial data about timing
-TimingInfo = struct('onset',[],'name',[],'topdown',[],...
+TimingInfo = struct('onset',[],'trial',[],'name',[],'topdown',[],...
     'resp',[],'trialdur',[],'jitter',[]);
 
 %trial by trial responses
@@ -150,7 +150,9 @@ tic
 for trial = 1:length(words)
     
     %This is the base all timings are measured against
-    TimingInfo(trial).onset = TrialLoopStart - GetSecs;
+    trial_start = GetSecs;
+    TimingInfo(trial).onset = GetSecs - TrialLoopStart;
+    TimingInfo(trial).trial = trial_start;
     
     character = words{trial,1};
     word_top = words{trial,2};
@@ -176,7 +178,7 @@ for trial = 1:length(words)
     Screen('TextFont', window, 'Sans Serif');
     nameTextRect = Screen('TextBounds',window,character);
     name_presentation_start = GetSecs;
-    TimingInfo(trial).name = name_presentation_start - TimingInfo(trial).onset;
+    TimingInfo(trial).name = name_presentation_start;
     %for frame = 1:nameFrames
     DrawFormattedText(window, character, 'center', 'center', white);
     vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
@@ -192,7 +194,7 @@ for trial = 1:length(words)
     botTextRect = Screen('TextBounds',window,word_bottom);
     bot = bottomBound;
     topdown_start = GetSecs;
-    TimingInfo(trial).topdown = topdown_start - TimingInfo(trial).onset;
+    TimingInfo(trial).topdown = topdown_start;
     %for frame = 1:wordsFrames
     Screen('DrawLines', window, allCoords,...
         lineWidthPix, white, [xCenter yCenter], 2);
@@ -233,7 +235,7 @@ for trial = 1:length(words)
     
     
     resp_start = GetSecs;
-    TimingInfo(trial).resp = resp_start - TimingInfo(trial).onset;
+    TimingInfo(trial).resp = resp_start;
     responded = 0;
     %AllowedResponse = 2;
     %for frame = 1:respFrames
@@ -248,7 +250,7 @@ for trial = 1:length(words)
         if listenScan && listenInput
             [portData, ~] = getAnyButtonPress_simple(hLum);
             if ~responded && ~isempty(portData)
-                numPresses = portData;
+                numPresses = char(portData);
                 fprintf('Pressed button ASCII %s char %d\n', numPresses);
                 RT = GetSecs - resp_start;
                 responded = 1;
@@ -268,11 +270,11 @@ for trial = 1:length(words)
         end
     end  % for frames
     fprintf('Response period lasted %.2f\n', GetSecs - resp_start);
-    TimingInfo(trial).trialdur = GetSecs - TimingInfo(trial).onset;
+    TimingInfo(trial).trialdur = GetSecs - TimingInfo(trial).trial;
     %jittFrames = jittFrame{trial};
 
     jitter_start = GetSecs;
-    TimingInfo(trial).jitter = jitter_start - TimingInfo(trial).onset;
+    TimingInfo(trial).jitter = jitter_start;
     %for frame = 1:jittFrames
     Screen('DrawLines', window, allCoords,...
         lineWidthPix, white, [xCenter yCenter], 2);
