@@ -1,5 +1,7 @@
 function AdjTaskfMRI(Subject,Run,DEBUG)
 % AdjTaskfMRI(SubNum,RunNum,DEBUG)
+
+% Use 256 TRs, 320s per block. 
 ViewDist = 30;
 
 if DEBUG
@@ -20,9 +22,11 @@ end
 addpath(fullfile(outdir,'ExpUtils'));
 
 PsychDefaultSetup(2);
+
 % XXX: REMOVE ME XXXX
 Screen('Preference', 'SkipSyncTests', 1);
 % XXXXXXX
+
 screens = Screen('Screens');
 screenNumber = max(screens);
 black = BlackIndex(screenNumber);
@@ -106,19 +110,27 @@ end
 vbl = Screen('Flip',window);
 % instruction screen
 for frame=1:instrFrames
-    blocktext='Please indicate with left or \n right arrow which adjective applies \n more to each character. \n';
+    blocktext='Please indicate with left or \n right button which adjective applies \n more to each character. \n';
     Screen(window,'TextSize', 30);
     DrawFormattedText(window, blocktext, 'center', 'center', white);
     vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
 end
 
-TrialInfo = struct('onset',[],'dur',[],'char',[],'top',[],...
+% trial by trial data about presentation
+TrialInfo = struct('char',[],'top',[],...
     'bottom',[],'nameorth',[],'toporth',[],'botorth',[],'wordsw',[],...
-    'RT',[],'pressedButtons',[],'leftorth',[],'rightorth',[],'ISI',[]);
+    'leftorth',[],'rightorth',[]);
+
+% trial by trial data about timing
+TimingInfo = struct('onset',[],'name',[],'topdown',[],...
+    'resp',[],'trialdur',[],'jitter',[]);
+
+%trial by trial responses
+ResponseInfo = struct('RT',[],'pressedButtons',[]);
 
 % muting for debugging
 waitT = 0;
-if 0%listenScan
+if listenScan
     %waitT = waitForTrigger(hLum);
     while waitT == 0
         DisplayText = 'Waiting for trigger...';
@@ -137,8 +149,8 @@ TrialLoopStart = GetSecs;
 tic
 for trial = 1:length(words)
     
-    %vbl = Screen('Flip', window);
-    TrialInfo(trial).onset = TrialLoopStart - GetSecs;
+    %This is the base all timings are measured against
+    TimingInfo(trial).onset = TrialLoopStart - GetSecs;
     
     character = words{trial,1};
     word_top = words{trial,2};
@@ -151,11 +163,11 @@ for trial = 1:length(words)
     if trial == 1
         fixation_start = GetSecs;
         %for frame = 1:fixFrames
-            Screen('DrawLines', window, allCoords,...
-                lineWidthPix, white, [xCenter yCenter], 2);
+        Screen('DrawLines', window, allCoords,...
+            lineWidthPix, white, [xCenter yCenter], 2);
         
-            vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
-            WaitSecs(fixSecs);
+        vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
+        WaitSecs(fixSecs);
         %end
         fprintf('Initial fixation took %.2f s\n', GetSecs - fixation_start);
     end
@@ -164,10 +176,11 @@ for trial = 1:length(words)
     Screen('TextFont', window, 'Sans Serif');
     nameTextRect = Screen('TextBounds',window,character);
     name_presentation_start = GetSecs;
+    TimingInfo(trial).name = name_presentation_start - TimingInfo(trial).onset;
     %for frame = 1:nameFrames
-        DrawFormattedText(window, character, 'center', 'center', white);
-        vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
-        WaitSecs(nameSecs);
+    DrawFormattedText(window, character, 'center', 'center', white);
+    vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
+    WaitSecs(nameSecs);
     %end
     fprintf('Name presentation took %.2f s\n', GetSecs - name_presentation_start);
     TrialInfo(trial).nameorth = nameTextRect;
@@ -179,13 +192,14 @@ for trial = 1:length(words)
     botTextRect = Screen('TextBounds',window,word_bottom);
     bot = bottomBound;
     topdown_start = GetSecs;
+    TimingInfo(trial).topdown = topdown_start - TimingInfo(trial).onset;
     %for frame = 1:wordsFrames
-        Screen('DrawLines', window, allCoords,...
-            lineWidthPix, white, [xCenter yCenter], 2);      
-        DrawFormattedText(window, word_top, 'center', top, white);        
-        DrawFormattedText(window, word_bottom, 'center', bot, white);        
-        vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
-        WaitSecs(wordsSecs);
+    Screen('DrawLines', window, allCoords,...
+        lineWidthPix, white, [xCenter yCenter], 2);
+    DrawFormattedText(window, word_top, 'center', top, white);
+    DrawFormattedText(window, word_bottom, 'center', bot, white);
+    vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
+    WaitSecs(wordsSecs);
     %end
     fprintf('TopDown phase took %.2f s\n', GetSecs - topdown_start);
     
@@ -193,9 +207,9 @@ for trial = 1:length(words)
     TrialInfo(trial).botorth = botTextRect;
     
     
-    numPresses = []; 
-    RT = 0; 
-
+    numPresses = [];
+    RT = 0;
+    
     Screen('TextSize', window, 50);
     Screen('TextFont', window, 'Sans Serif');
     
@@ -205,33 +219,32 @@ for trial = 1:length(words)
         xaxis_left = leftBound-leftTextRect(3);
         rightTextRect = Screen('TextBounds',window,word_bottom);
         xaxis_right = rightBound;
+        word_xaxis_left = word_top;
+        word_xaxis_right = word_bottom;
     else
         TrialInfo(trial).wordsw = 'top2right';
         leftTextRect = Screen('TextBounds',window,word_bottom);
         xaxis_left = leftBound-leftTextRect(3);
         rightTextRect = Screen('TextBounds',window,word_top);
-        xaxis_right = rightBound;        
-    end
-    
-    resp_start = GetSecs;
-    responded = 0;
-    AllowedResponse = 2;
-    %for frame = 1:respFrames
-    Screen('DrawLines', window, allCoords,...
-        lineWidthPix, white, [xCenter yCenter], 2);
-    if lORr{trial} == 1
-        word_xaxis_left = word_top;
-        word_xaxis_right = word_bottom;
-    else
+        xaxis_right = rightBound;
         word_xaxis_left = word_bottom;
         word_xaxis_right = word_top;
     end
+    
+    
+    resp_start = GetSecs;
+    TimingInfo(trial).resp = resp_start - TimingInfo(trial).onset;
+    responded = 0;
+    %AllowedResponse = 2;
+    %for frame = 1:respFrames
+    Screen('DrawLines', window, allCoords,...
+        lineWidthPix, white, [xCenter yCenter], 2);
     DrawFormattedText(window, word_xaxis_left, xaxis_left, 'center', white);
     DrawFormattedText(window, word_xaxis_right, xaxis_right, 'center', white);
-    Screen('DrawingFinished', window);
+    %Screen('DrawingFinished', window);
     %Flip
     [vbl, stimOnset] = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
-    while GetSecs - stimOnset < AllowedResponse
+    while GetSecs - stimOnset < respSecs
         if listenScan && listenInput
             [portData, ~] = getAnyButtonPress_simple(hLum);
             if ~responded && ~isempty(portData)
@@ -255,35 +268,34 @@ for trial = 1:length(words)
         end
     end  % for frames
     fprintf('Response period lasted %.2f\n', GetSecs - resp_start);
-    TrialInfo(trial).dur = GetSecs - TrialInfo(trial).onset; 
-    TrialInfo(trial).ISI = GetSecs; 
-    jittFrames = jittFrame{trial};
-    %jittFrames = nameFrames;
-    
+    TimingInfo(trial).trialdur = GetSecs - TimingInfo(trial).onset;
+    %jittFrames = jittFrame{trial};
+
     jitter_start = GetSecs;
+    TimingInfo(trial).jitter = jitter_start - TimingInfo(trial).onset;
     %for frame = 1:jittFrames
-        Screen('DrawLines', window, allCoords,...
-            lineWidthPix, white, [xCenter yCenter], 2);
-        
-        vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
-        WaitSecs(jitter{trial});
+    Screen('DrawLines', window, allCoords,...
+        lineWidthPix, white, [xCenter yCenter], 2);
+    
+    vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
+    WaitSecs(jitter{trial});
     %end
     fprintf('Jitter took %.2f s, supposed to be %.2f s\n', GetSecs - jitter_start, jitter{trial});
     
-    TrialInfo(trial).RT = RT;
-    TrialInfo(trial).pressedButtons = numPresses;
+    ResponseInfo(trial).RT = RT;
+    ResponseInfo(trial).pressedButtons = numPresses;
     TrialInfo(trial).leftorth = leftTextRect;
     TrialInfo(trial).rightorth = rightTextRect;
     
     
 end
 
-for frame = 1:fixFrames
-    Screen('DrawLines', window, allCoords,...
-        lineWidthPix, white, [xCenter yCenter], 2);
-    
-    vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
-end
+%for frame = 1:fixFrames
+Screen('DrawLines', window, allCoords,...
+    lineWidthPix, white, [xCenter yCenter], 2);
+Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
+WaitSecs(fixSecs);
+%end
 total_time = toc;
 fprintf('*** TOTAL RUN TIME %.3f\n', total_time);
 
@@ -298,7 +310,7 @@ Screen('CloseAll');
 sca
 
 out_file=['Sub' num2str(Subject) 'Run' num2str(Run) '_Adj.mat'];
-save (fullfile(subdir,out_file), 'TrialInfo');
+save (fullfile(subdir,out_file), 'TrialInfo','TimingInfo','ResponseInfo');
 end
 
 
