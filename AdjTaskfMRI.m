@@ -20,7 +20,9 @@ end
 addpath(fullfile(outdir,'ExpUtils'));
 
 PsychDefaultSetup(2);
-
+% XXX: REMOVE ME XXXX
+Screen('Preference', 'SkipSyncTests', 1);
+% XXXXXXX
 screens = Screen('Screens');
 screenNumber = max(screens);
 black = BlackIndex(screenNumber);
@@ -147,21 +149,27 @@ for trial = 1:length(words)
     TrialInfo(trial).bottom = word_bottom;
     
     if trial == 1
-        for frame = 1:fixFrames
+        fixation_start = GetSecs;
+        %for frame = 1:fixFrames
             Screen('DrawLines', window, allCoords,...
                 lineWidthPix, white, [xCenter yCenter], 2);
         
             vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
-        end
+            WaitSecs(fixSecs);
+        %end
+        fprintf('Initial fixation took %.2f s\n', GetSecs - fixation_start);
     end
     
     Screen('TextSize', window, 80);
     Screen('TextFont', window, 'Sans Serif');
     nameTextRect = Screen('TextBounds',window,character);
-    for frame = 1:nameFrames
+    name_presentation_start = GetSecs;
+    %for frame = 1:nameFrames
         DrawFormattedText(window, character, 'center', 'center', white);
         vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
-    end
+        WaitSecs(nameSecs);
+    %end
+    fprintf('Name presentation took %.2f s\n', GetSecs - name_presentation_start);
     TrialInfo(trial).nameorth = nameTextRect;
     
     Screen('TextSize', window, 50);
@@ -170,19 +178,23 @@ for trial = 1:length(words)
     top = topBound-topTextRect(4);
     botTextRect = Screen('TextBounds',window,word_bottom);
     bot = bottomBound;
-    for frame = 1:wordsFrames
+    topdown_start = GetSecs;
+    %for frame = 1:wordsFrames
         Screen('DrawLines', window, allCoords,...
             lineWidthPix, white, [xCenter yCenter], 2);      
         DrawFormattedText(window, word_top, 'center', top, white);        
         DrawFormattedText(window, word_bottom, 'center', bot, white);        
         vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
-    end
+        WaitSecs(wordsSecs);
+    %end
+    fprintf('TopDown phase took %.2f s\n', GetSecs - topdown_start);
     
     TrialInfo(trial).toporth = topTextRect;
     TrialInfo(trial).botorth = botTextRect;
     
     
-    numPresses = []; RT = 0; isCorrect = [];
+    numPresses = []; 
+    RT = 0; 
 
     Screen('TextSize', window, 50);
     Screen('TextFont', window, 'Sans Serif');
@@ -202,77 +214,61 @@ for trial = 1:length(words)
     end
     
     resp_start = GetSecs;
-    for frame = 1:respFrames
-        Screen('DrawLines', window, allCoords,...
-            lineWidthPix, white, [xCenter yCenter], 2);
-        if lORr{trial} == 1
-            DrawFormattedText(window, word_top, xaxis_left, 'center', white);
-            DrawFormattedText(window, word_bottom, xaxis_right, 'center', white);
-            Screen('DrawingFinished', window);
-            %Flip
-            vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);         
-            if 1%listenScan && listenInput
-                [portData, readTime] = getAnyButtonPress_simple(hLum);
-                if ~isempty(portData)
-                    numPresses = portData;
-                    disp('pressed button')
-                    numPresses
-                    RT = readTime;
-                end
-                isCorrect = 0;
-            else
-                [isCorrect, rt, keyCode] = KbCheck;
-                if isCorrect
-                    RT = rt-resp_start;
-                    numPresses = KbName(find(keyCode));  
-                end
-                if keyCode(KbName('ESCAPE')) == 1
-                    sca;
-                    disp('*** Experiment terminated ***');
-                    return
-                end
-            end            
-
-        else
-            DrawFormattedText(window, word_bottom, xaxis_left, 'center', white);
-            DrawFormattedText(window, word_top, xaxis_right, 'center', white);
-            Screen('DrawingFinished', window);
-            %Flip
-            vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
-            if 1%listenScan && listenInput
-                [portData, readTime] = getAnyButtonPress_simple(hLum);
-                if ~isempty(portData)
-                    numPresses = portData;
-                    disp('pressed button')
-                    numPresses
-                    RT = readTime;
-                end
-                isCorrect = 0;
-            else
-                [isCorrect, rt, keyCode] = KbCheck;
-                if isCorrect
-                    RT = rt-resp_start;
-                    numPresses = KbName(find(keyCode));
-                end
-                if keyCode(KbName('ESCAPE')) == 1
-                    sca;
-                    disp('*** Experiment terminated ***');
-                    return
-                end
-            end            
-
-        end
+    responded = 0;
+    AllowedResponse = 2;
+    %for frame = 1:respFrames
+    Screen('DrawLines', window, allCoords,...
+        lineWidthPix, white, [xCenter yCenter], 2);
+    if lORr{trial} == 1
+        word_xaxis_left = word_top;
+        word_xaxis_right = word_bottom;
+    else
+        word_xaxis_left = word_bottom;
+        word_xaxis_right = word_top;
     end
+    DrawFormattedText(window, word_xaxis_left, xaxis_left, 'center', white);
+    DrawFormattedText(window, word_xaxis_right, xaxis_right, 'center', white);
+    Screen('DrawingFinished', window);
+    %Flip
+    [vbl, stimOnset] = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
+    while GetSecs - stimOnset < AllowedResponse
+        if listenScan && listenInput
+            [portData, ~] = getAnyButtonPress_simple(hLum);
+            if ~responded && ~isempty(portData)
+                numPresses = portData;
+                fprintf('Pressed button ASCII %s char %d\n', numPresses);
+                RT = GetSecs - resp_start;
+                responded = 1;
+            end
+        else
+            [~, rt, keyCode] = KbCheck;
+            if ~responded && any(keyCode)
+                RT = rt-resp_start;
+                numPresses = KbName(find(keyCode));
+                responded = 1;
+            end
+            if keyCode(KbName('ESCAPE')) == 1
+                sca;
+                disp('*** Experiment terminated ***');
+                return
+            end
+        end
+    end  % for frames
+    fprintf('Response period lasted %.2f\n', GetSecs - resp_start);
     TrialInfo(trial).dur = GetSecs - TrialInfo(trial).onset; 
     TrialInfo(trial).ISI = GetSecs; 
-    %jittFrames = jittFrame{trial};
-    jittFrames = nameFrames;
-    for frame = 1:jittFrames
+    jittFrames = jittFrame{trial};
+    %jittFrames = nameFrames;
+    
+    jitter_start = GetSecs;
+    %for frame = 1:jittFrames
         Screen('DrawLines', window, allCoords,...
             lineWidthPix, white, [xCenter yCenter], 2);
         
         vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
-    end
+        WaitSecs(jitter{trial});
+    %end
+    fprintf('Jitter took %.2f s, supposed to be %.2f s\n', GetSecs - jitter_start, jitter{trial});
     
     TrialInfo(trial).RT = RT;
     TrialInfo(trial).pressedButtons = numPresses;
@@ -288,7 +284,8 @@ for frame = 1:fixFrames
     
     vbl = Screen('Flip', window, vbl + (waitFrames - 0.5) * ifi);
 end
-toc
+total_time = toc;
+fprintf('*** TOTAL RUN TIME %.3f\n', total_time);
 
 if listenScan
     IOPort('Flush',hLum);
